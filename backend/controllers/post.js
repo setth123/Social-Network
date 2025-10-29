@@ -17,8 +17,16 @@ export const createPost=async(req,res)=>{
 }
 
 export const getFeedPosts=async(req,res)=>{
-    try{
-        const post=await Post.find();
+    try
+        const {userId}=req.body();
+        const user=await User.findById(userId);
+        const friendIds=user.friends;
+        
+        //const post=await Post.find();
+        const friendPosts=[];
+        foreach(friendId in friendIds){
+            const post=await Post.find(
+        }
         res.status(200).json(post);
     }
     catch(err){
@@ -84,4 +92,5 @@ export const patchComment=async(req,res)=>{
         console.log(err);
         return res.status(500).json(err.message);
     }
+
 }
