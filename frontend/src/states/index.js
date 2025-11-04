@@ -5,6 +5,7 @@ const initialState={
     user:null,
     token:null,
     posts:[],
+    notifications:[],
 };
 export const authSlice=createSlice({
     name:"auth",
@@ -39,7 +40,16 @@ export const authSlice=createSlice({
             })
             state.posts=updatePosts;
         },
+        setNotifications:(state,action)=>{
+            state.notifications = action.payload.notifications;
+        },
+        addNotifications:(state,action)=>{
+            state.notifications.unshift(action.payload.notification);
+        },
+        setNotificationsRead:(state,action)=>{
+            state.notifications.forEach(n => n.isRead = true);
+        }
     }
 })
-export const {setMode,setLogin,setLogout,setFriends,setPosts,setPost}=authSlice.actions;
+export const {setMode,setLogin,setLogout,setFriends,setPosts,setPost, setNotifications, addNotifications, setNotificationsRead}=authSlice.actions;
 export default authSlice.reducer;

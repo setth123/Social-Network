@@ -26,5 +26,6 @@ const postSchema=mongoose.Schema({
         default:[],
     },
 },{timestamps:true})
+postSchema.index({userId:1,createAt:-1});
 const Post=mongoose.model("Post",postSchema);
 export default Post;

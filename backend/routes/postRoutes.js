@@ -1,13 +1,20 @@
 import express from "express";
 import { getFeedPosts,getUserPosts,likePost,patchComment } from "../controllers/post.js";
 import verifyToken from "../middlewares/auth.js";
-import { getUsers } from "../controllers/users.js";
 
-const postRouter=express.Router();
-postRouter.get("/",verifyToken,getFeedPosts);
-postRouter.get("/:userId/posts",verifyToken,getUserPosts);
-postRouter.patch("/:id/like",verifyToken,likePost);
-postRouter.patch("/:postId/comment",verifyToken,patchComment);
+const createPostRouter = (io, onlineUsers) => {
+    const postRouter=express.Router();
 
-export default postRouter;
+    // Định nghĩa các hàm controller với io và onlineUsers được truyền vào
+    const likePostHandler = (req, res) => likePost(req, res, io, onlineUsers);
+    const patchCommentHandler = (req, res) => patchComment(req, res, io, onlineUsers);
 
+    postRouter.get("/",verifyToken,getFeedPosts);
+    postRouter.get("/:userId/posts",verifyToken,getUserPosts);
+    postRouter.patch("/:id/like",verifyToken,likePostHandler);
+    postRouter.patch("/:postId/comment",verifyToken,patchCommentHandler);
+
+    return postRouter;
+};
+
+export default createPostRouter;

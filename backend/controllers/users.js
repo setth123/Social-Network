@@ -1,4 +1,5 @@
 import User from "../models/User.js";
+import redisClient from "../redisClient.js";
 
 export const getUser=async(req,res)=>{
     try{
@@ -29,8 +30,7 @@ export const getUsers=async(req,res)=>{
                 }
             }
         ])
-        if(users.length===0)res.status(404).json([]);
-        else res.status(200).json(users);
+        res.status(200).json(users);
     }
     catch(err){
         console.log(err);
@@ -43,8 +43,8 @@ export const getUserFriends=async(req,res)=>{
         const {id}=req.params;
         const user=await User.findById(id);
 
-        //fetch user's friends
-        const friends = await Promise.all(user.friends.map((id)=>User.findById(id)));
+        // Tối ưu hóa: Chỉ một truy vấn để lấy tất cả bạn bè
+        const friends = await User.find({ _id: { $in: user.friends } });
 
         const formattedFriends=friends.map(({_id,firstName,lastName,occupation,location,picturePath})=>{
             return {_id,firstName,lastName,occupation,location,picturePath};
@@ -65,17 +65,28 @@ export const addRemoveFriend=async (req,res)=>{
 
         if(user.friends.includes(friendId)){
             user.friends=user.friends.filter((id)=>id!==friendId);
-            friend.friends=friend.friends.filter((id)=>id!==id);
+            friend.friends=friend.friends.filter((currentId)=>currentId!==id); // Sửa lỗi logic
         }else{
             user.friends.push(friendId);
             friend.friends.push(id);
         }
         await user.save();
         await friend.save();
-        const formattedFriends=user.friends.map(({_id,firstName,lastName,occupation,location,picturePath})=>{
+
+        // Cache Invalidation
+        await redisClient.del(`feed:${id}`);
+        await redisClient.del(`feed:${friendId}`);
+
+
+        // Lấy lại danh sách bạn bè đầy đủ thông tin để trả về
+        const friends = await User.find({ _id: { $in: user.friends } });
+
+        const formattedFriends = friends.map(
+            ({ _id, firstName, lastName, occupation, location, picturePath }) => {
                 return {_id,firstName,lastName,occupation,location,picturePath};
             }
         );
+
         res.status(200).json(formattedFriends);
     }catch(err){
         console.log(err);

@@ -1,118 +1,148 @@
-import { useTheme } from "@emotion/react";
-import FlexBetween from "../../components/FlexBetweens";
+import { useState, useEffect, useRef } from "react";
+import {
+    Box,
+    IconButton,
+    InputBase,
+    Typography,
+    Select,
+    MenuItem,
+    FormControl,
+    useTheme,
+    useMediaQuery,
+    Badge,
+} from "@mui/material";
+import {
+    Search,
+    Message,
+    DarkMode,
+    LightMode,
+    Notifications,
+    Help,
+    Menu,
+    Close,
+} from "@mui/icons-material";
 import { useDispatch, useSelector } from "react-redux";
-import { FormControl, IconButton, InputBase, MenuItem, Select, Typography, useMediaQuery,Box, Divider } from "@mui/material";
+import { setMode, setLogout, setNotifications, addNotifications, setNotificationsRead } from "../../states";
 import { useNavigate } from "react-router-dom";
-import { Close, DarkMode, Help, LightMode, Message, Notifications, Search,Menu } from "@mui/icons-material";
-import { setLogout, setMode } from "../../states";
-import { useEffect, useState } from "react";
-import Friend from "../../components/Friend";
+import FlexBetween from "../../components/FlexBetween";
+import NotificationWidget from "../widgets/NotificationWidget";
+import API from "../../api/index.js";
+import { io } from "socket.io-client";
 
-const NavBar = () => {
-    const theme=useTheme();
-    const alt=theme.palette.background.alt;
-    const neutralLight=theme.palette.neutral.light;
-    const dark=theme.palette.neutral.dark;
-    const primaryLight=theme.palette.primary.light;
-    const background=theme.palette.background.default;
+const Navbar = () => {
+    const [isMobileMenuToggled, setIsMobileMenuToggled] = useState(false);
+    const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+    const dispatch = useDispatch();
+    const navigate = useNavigate();
+    const user = useSelector((state) => state.user);
+    const notifications = useSelector((state) => state.notifications);
+    const isNonMobileScreens = useMediaQuery("(min-width: 1000px)");
+    const socket = useRef();
 
-    const user=useSelector((state)=>state.user);
-    const fullName=`${user.firstName} ${user.lastName}`;
-    const navigate=useNavigate();
-    const dispatch=useDispatch();
-    const isNonMobile=useMediaQuery("(min-width:1000px)");
-    const [isMobileToggled,setIsMobileToggled]=useState(false);
+    const theme = useTheme();
+    const neutralLight = theme.palette.neutral.light;
+    const dark = theme.palette.neutral.dark;
+    const background = theme.palette.background.default;
+    const primaryLight = theme.palette.primary.light;
+    const alt = theme.palette.background.alt;
 
-    //searching
-    const [isSearch,setIsSearch]=useState(false);
-    const [keyword,setKeyword]=useState("");
-    const [searchUsers,setSearchUsers]=useState([])
-    const token=useSelector((state)=>state.token);
-    const handleSearch=async()=>{
-        const res=await fetch("http://localhost:4000/users/searchUsers",{
-            method: "POST",
-            headers:{Authorization:`Bearer ${token}`,
-                    "Content-Type": "application/json"},
-            body:JSON.stringify({keyword:keyword})
-        })
-        setSearchUsers(await res.json());
-        setIsSearch(true);
-        setKeyword("");
-    }
+    const fullName = user ? `${user.firstName} ${user.lastName}` : "";
+    const unreadCount = notifications.filter(n => !n.isRead).length;
+
+    // Fetch initial notifications
+    useEffect(() => {
+        const getNotifications = async () => {
+            try {
+                const response = await API.get("/notifications");
+                dispatch(setNotifications({ notifications: response.data }));
+            } catch (error) {
+                console.error("Failed to fetch notifications:", error);
+            }
+        };
+        if (user) {
+            getNotifications();
+        }
+    }, [user, dispatch]);
+
+    // Socket.IO listener
+    useEffect(() => {
+        if (!user) return;
+
+        socket.current = io("ws://localhost:4000");
+        socket.current.emit("addUser", user._id);
+
+        socket.current.on("getNotification", (data) => {
+            // Thêm thông báo mới vào Redux state
+            dispatch(addNotifications({ notification: data.notification }));
+        });
+
+        return () => socket.current.disconnect();
+    }, [user, dispatch]);
+
+    const handleNotificationToggle = async () => {
+        setIsNotificationOpen(!isNotificationOpen);
+        // Nếu mở và có thông báo chưa đọc -> đánh dấu đã đọc
+        if (!isNotificationOpen && unreadCount > 0) {
+            try {
+                await API.patch("/notifications/read");
+                dispatch(setNotificationsRead());
+            } catch (error) {
+                console.error("Failed to mark notifications as read:", error);
+            }
+        }
+    };
+
     return (
         <FlexBetween padding="1rem 6%" backgroundColor={alt}>
             <FlexBetween gap="1.75rem">
-                <Typography fontWeight="bold" fontSize="clamp(1rem,2rem,2.25rem)" color="primary" onClick={()=>navigate("/home")} sx={{ ":hover":{color:primaryLight,cursor:"pointer"}}}>SocialNetwork</Typography>
-                {isNonMobile&&(
-                    <Box>
+                <Typography
+                    fontWeight="bold"
+                    fontSize="clamp(1rem, 2rem, 2.25rem)"
+                    color="primary"
+                    onClick={() => navigate("/home")}
+                    sx={{ "&:hover": { color: primaryLight, cursor: "pointer" } }}
+                >
+                    Sociopedia
+                </Typography>
+                {isNonMobileScreens && (
                     <FlexBetween backgroundColor={neutralLight} borderRadius="9px" gap="3rem" padding="0.1rem 1.5rem">
-                        <InputBase placeholder="Search for people you know" value={keyword} onChange={(e)=>setKeyword(e.target.value)}/>
-                        <IconButton onClick={handleSearch}><Search/></IconButton>
+                        <InputBase placeholder="Search..." />
+                        <IconButton><Search /></IconButton>
                     </FlexBetween>
-                        {isSearch&&(
-                            searchUsers.length===0 ? (
-                                <Typography>Can't find any user</Typography>
-                            ):(
-                                <Box sx={{position:"absolute",zIndex: 1000}} backgroundColor={alt}>
-                                    {searchUsers.map((user)=>(
-                                        <>
-                                            <Friend sx={{py:"1rem"}}friendId={user._id} name={`${user.firstName} ${user.lastName}`} subtitle={user.location} userPicturePath={user.picturePath}/>
-                                            <Divider/>
-                                        </>
-                                    ))}
-                                </Box>
-                            )
-                        )}
-                    </Box>
-                )}
-                {isNonMobile?(
-                    <FlexBetween gap="2rem">
-                        <IconButton onClick={()=>dispatch(setMode())}>
-                            {theme.palette.mode==="dark"?(
-                                <DarkMode sx={{fontSize:"25px"}}/>
-                            ):(<LightMode sx={{color:dark,fontSize:"25px"}}/>)}
-                        </IconButton>
-                        <Message sx={{fontSize:"25px"}}/>
-                        <Notifications sx={{fontSize:"25px"}}/>
-                        <Help sx={{fontSize:"25px"}}/>
-                        <FormControl variant="standard" value={fullName}>
-                            <Select value={fullName} sx={{backgroundColor: neutralLight,width:"150px",borderRadius:"0.25rem", p:"0.25rem 1rem","& .MuiSelect-select:focus":{backgroundColor:neutralLight}}} input={<InputBase/>}>
-                                <MenuItem value={fullName}>
-                                    <Typography>{fullName}</Typography>
-                                </MenuItem>
-                                <MenuItem onClick={()=>dispatch(setLogout())}>Log out</MenuItem>
-                            </Select>
-                        </FormControl>
-                    </FlexBetween>
-                ):(
-                    <IconButton onClick={()=>setIsMobileToggled(!isMobileToggled)}><Menu/></IconButton>
-                )}
-
-                {!isNonMobile&&isMobileToggled&&(
-                    <Box position="fixed" right="0" bottom="0" height="100%" zIndex="10" maxWidth="500px" minWidth="300px" backgroundColor={background}>
-                        <Box display="flex" justifyContent="flex-end" p="1rem"><IconButton onClick={()=>setIsMobileToggled(!isMobileToggled)}><Close/></IconButton></Box>
-                        <FlexBetween display="flex" flexDirection="column" justifyContent="center" alignItems="center" gap="3rem">
-                            <IconButton onClick={()=>dispatch(setMode())}>{theme.palette.mode==="dark"?(
-                                <DarkMode sx={{fontSize:"25px"}}/>
-                            ):(<LightMode sx={{color:dark,fontSize:"25px"}}/>)}
-                            </IconButton>
-                            <Message sx={{fontSize:"25px"}}/>
-                            <Notifications sx={{fontSize:"25px"}}/>
-                            <Help sx={{fontSize:"25px"}}/>
-                            <FormControl variant="standard" value={fullName}>
-                                <Select value={fullName} sx={{backgroundColor:neutralLight,width:"150px",borderRadius:"0.25rem", p:"0.25rem 1rem","& .MuiSvgIcon-root":{pr:"0.25rem",width:"3rem"},"& .MuiSelect-select:focus":{backgroundColor:neutralLight}}} input={<InputBase />}>
-                                    <MenuItem value={fullName}>
-                                        <Typography>{fullName}</Typography>
-                                    </MenuItem>
-                                    <MenuItem onClick={()=>dispatch(setLogout())}>Log out</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </FlexBetween>
-                    </Box>
                 )}
             </FlexBetween>
-        </FlexBetween>
-    )
-}
 
-export default NavBar;
+            {/* DESKTOP NAV */}
+            {isNonMobileScreens ? (
+                <FlexBetween gap="2rem">
+                    <IconButton onClick={() => dispatch(setMode())}>
+                        {theme.palette.mode === "dark" ? <DarkMode sx={{ fontSize: "25px" }} /> : <LightMode sx={{ color: dark, fontSize: "25px" }} />}
+                    </IconButton>
+                    <Message sx={{ fontSize: "25px" }} />
+                    <IconButton onClick={handleNotificationToggle}>
+                        <Badge badgeContent={unreadCount} color="error">
+                            <Notifications sx={{ fontSize: "25px" }} />
+                        </Badge>
+                    </IconButton>
+                    <Help sx={{ fontSize: "25px" }} />
+                    <FormControl variant="standard" value={fullName}>
+                        <Select
+                            value={fullName}
+                            sx={{ backgroundColor: neutralLight, width: "150px", borderRadius: "0.25rem", p: "0.25rem 1rem", "& .MuiSvgIcon-root": { pr: "0.25rem", width: "3rem" }, "& .MuiSelect-select:focus": { backgroundColor: neutralLight } }}
+                            input={<InputBase />}
+                        >
+                            <MenuItem value={fullName}><Typography>{fullName}</Typography></MenuItem>
+                            <MenuItem onClick={() => dispatch(setLogout())}>Log Out</MenuItem>
+                        </Select>
+                    </FormControl>
+                    {isNotificationOpen && <NotificationWidget notifications={notifications} />}
+                </FlexBetween>
+            ) : (
+                // ... Mobile Nav (giữ nguyên nếu có)
+                <IconButton onClick={() => setIsMobileMenuToggled(!isMobileMenuToggled)}><Menu /></IconButton>
+            )}
+        </FlexBetween>
+    );
+};
+
+export default Navbar;
